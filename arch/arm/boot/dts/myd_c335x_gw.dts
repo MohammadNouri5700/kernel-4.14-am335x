@@ -64,7 +64,7 @@
 
 	panel {
 		compatible = "ti,tilcdc,panel";
-		status = "okay";
+		status = "disabled";
 		panel-info {
 			ac-bias           = <255>;
 			ac-bias-intrpt    = <0>;
@@ -600,17 +600,6 @@
 		compatible = "epson,rx8025t";
 		reg = <0x32>;
 	};
-	
-	ft0x5x_ts@38 {
-	    compatible = "ft5x06_ts";
-		pinctrl-names = "default";
-		pinctrl-0 = <&ft5x0x_pins_default>;
-	        reg = <0x38>;
-	        tp_int = <&gpio0 3 1>;
-	        tp_resetn = <&gpio3 20 1>;
-	        polling_mode = /bits/ 8 <0>;
-	        multi_touch = /bits/ 8 <0>;
-	    };
 
     atsha204a@50 {
         compatible = "atmel,atsha204a";
@@ -666,7 +655,7 @@
 };
 
 &lcdc {
-	status = "okay";
+	status = "disabled";
 	pinctrl-names = "default", "sleep";
 	pinctrl-0 = <&lcd_pins_default>;
 	pinctrl-1 = <&lcd_pins_sleep>;
@@ -860,7 +849,7 @@
 	pinctrl-names = "default", "sleep";
 	pinctrl-0 = <&davinci_mdio_default>;
 	pinctrl-1 = <&davinci_mdio_sleep>;
-	status = "okay";
+	status = "disabled";
 };
 
 &gpio0 {

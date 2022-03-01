@@ -57,7 +57,7 @@ Slave sub-nodes:
 
 Note: Exactly one of phy_id, phy-handle, or fixed-link must be specified.
 
-Note: "ti,hwmods" field is used to fetch the base address and irq
+Note: "ti,hwmods" field is used to fixed-linkfetch the base address and irq
 resources from TI, omap hwmod data base during device registration.
 Future plan is to migrate hwmod data base contents into device tree
 blob so that, all the required data will be used from device tree dts
