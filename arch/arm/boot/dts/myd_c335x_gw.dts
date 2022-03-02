@@ -858,7 +858,7 @@
     };
 
 &cpsw_emac0 {
-	phy-mode = "rgmii-txid";
+	phy-mode = "rgmii";
 	fixed-link {
     	speed = <1000>;
     	full-duplex;
@@ -867,7 +867,7 @@
 };
 
 &cpsw_emac1 {
-	phy-mode = "rgmii-txid";
+	phy-mode = "rgmii";
 	fixed-link {
     	speed = <1000>;
     	full-duplex;
