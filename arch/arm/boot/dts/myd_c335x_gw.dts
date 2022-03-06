@@ -837,9 +837,9 @@
 
 &mac {
 	slaves = <2>;
-	pinctrl-names = "default", "sleep";
+	pinctrl-names = "default";
 	pinctrl-0 = <&cpsw_default>;
-	pinctrl-1 = <&cpsw_sleep>;
+	//pinctrl-1 = <&cpsw_sleep>;
 	dual_emac = <1>;
 //	active_slave = <1>;
 	status = "okay";
@@ -858,21 +858,21 @@
     };
 
 &cpsw_emac0 {
-	phy-mode = "rgmii";
+	phy-mode = "rgmii-id";
+	//dual_emac_res_vlan=<1>;
 	fixed-link {
     	speed = <1000>;
     	full-duplex;
     };
-//	dual_emac_res_vlan=<0>;
 };
 
 &cpsw_emac1 {
-	phy-mode = "rgmii";
+	phy-mode = "rgmii-id";
+	//dual_emac_res_vlan=<2>;
 	fixed-link {
-    	speed = <1000>;
+    	speed = <10>;
     	full-duplex;
     };
-//	dual_emac_res_vlan=<1>;
 };
 
 &tscadc {
