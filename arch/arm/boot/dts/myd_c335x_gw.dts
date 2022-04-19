@@ -897,7 +897,7 @@
 	pinctrl-names = "default", "sleep";
 	pinctrl-0 = <&mmc1_pins_default>;
 	pinctrl-1 = <&mmc1_pins_sleep>;
-	cd-gpios = <&gpio3 21 GPIO_ACTIVE_HIGH>;
+	broken-cd;
 };
 
 &mmc3 {
