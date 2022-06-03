@@ -54,15 +54,15 @@
 
 	};
 	/* 7.0 inch, 800x480 resolution LCD, MYiR */
-	
+	/*
 	backlight {
 		compatible = "pwm-backlight";
 		pwms = <&ehrpwm0 0 50000 0>;
 		brightness-levels = <0 51 53 56 62 75 101 152 255>;
 		default-brightness-level = <8>;
-	};
+	};*/
 
-	panel {
+	/*panel {
 		compatible = "ti,tilcdc,panel";
 		status = "disabled";
 		panel-info {
@@ -92,18 +92,18 @@
 				vsync-active = <1>;
 			};
 		};
-	};
+	};*/
 	
 	/* 4.3 inch, 480x272 resolution LCD, MYiR */
-/*	
+/*
 	backlight {
 		compatible = "pwm-backlight";
 		pwms = <&ehrpwm0 0 50000 0>;
 		brightness-levels = <0 51 53 56 62 75 101 152 255>;
 		default-brightness-level = <8>;
 	};
-
-	panel {
+*/
+	/*panel {
 		compatible = "ti,tilcdc,panel";
 		status = "okay";
 		panel-info {
@@ -116,9 +116,9 @@
 			sync-ctrl         = <1>;
 			raster-order      = <0>;
 			fifo-th           = <0>;
-		};
+		};*/
 
-		display-timings {
+		/*display-timings {
 			480x272 {
 				clock-frequency = <9600000>;
 				hactive = <480>;
@@ -133,10 +133,12 @@
 				vsync-active = <0>;
 			};
 		};
-	};
-*/	
+	};*/
+	
 
 };
+
+
 
 &am33xx_pinmux {
 	pinctrl-names = "default";
@@ -228,28 +230,32 @@
 	};
 	uart4_pins_default: uart4_pins_default {
 		pinctrl-single,pins = <
-			0x168 ( PIN_INPUT_PULLUP | MUX_MODE1 ) /* (E18) uart0_ctsn.uart4_rxd */
-			0x16c ( PIN_OUTPUT_PULLDOWN | MUX_MODE1 ) /* (E17) uart0_rtsn.uart4_txd */
+			0x70 ( PIN_INPUT_PULLUP | MUX_MODE6 )    /* (T17) gpmc_wait0.uart4_rxd */
+			0x74 ( PIN_OUTPUT_PULLDOWN | MUX_MODE6 ) /* (U17) gpmc_wpn.uart4_txd */
+			0x78 (PIN_OUTPUT_PULLDOWN | MUX_MODE7)   /* (U18) gmii1_rxdv.GPIO1_28 */
 		>;
 	};
 
 	uart4_pins_sleep: uart4_pins_sleep {
 		pinctrl-single,pins = <
-			0x168 ( PIN_INPUT_PULLDOWN | MUX_MODE7 ) /* (E18) uart0_ctsn.uart4_rxd */
-			0x16c ( PIN_INPUT_PULLDOWN | MUX_MODE7 ) /* (E17) uart0_rtsn.uart4_txd */
+			0x70 ( PIN_INPUT_PULLDOWN | MUX_MODE6 ) /* (T17) uart4_ctsn.uart4_rxd */
+			0x74 ( PIN_INPUT_PULLDOWN | MUX_MODE6 ) /* (U17) uart4_rtsn.uart4_txd */
+			0x78 (PIN_OUTPUT_PULLDOWN | MUX_MODE7)   /* (U18) gmii1_rxdv.GPIO1_28 */
 		>;
 	};
 	
 	uart5_pins_default: uart5_pins_default {
 		pinctrl-single,pins = <
-			0x108 ( PIN_INPUT_PULLDOWN | MUX_MODE3 ) /* (H16) gmii1_col.uart5_rxd */
-			0x144 ( PIN_OUTPUT_PULLUP | MUX_MODE3 ) /* (H18) rmii1_refclk.uart5_txd */
+			0xc0 (PIN_INPUT_PULLDOWN  | MUX_MODE4)	   /*(U1) uart5_tx.uart5_txd */
+			0xc4 (PIN_OUTPUT_PULLUP   | MUX_MODE4)	   /*(U2) uart5_rx.uart5_rxd  */
+			0xd4 (PIN_OUTPUT_PULLDOWN | MUX_MODE7)     /* (V3) GPIO0_9 */
 		>;
 	};
 	uart5_pins_sleep: uart5_pins_sleep {
 		pinctrl-single,pins = <
-			0x108 ( PIN_INPUT_PULLDOWN | MUX_MODE7 ) /* (H16) gmii1_col.uart5_rxd */
-			0x144 ( PIN_INPUT_PULLDOWN | MUX_MODE7 ) /* (H18) rmii1_refclk.uart5_txd */
+			0xc0 (PIN_INPUT_PULLDOWN  | MUX_MODE4)	   /*(U1) uart5_tx.uart5_rxd */
+			0xc4 (PIN_INPUT_PULLDOWN  | MUX_MODE4)	   /*(U2) uart5_rx.uart5_txd  */
+			0xd4 (PIN_OUTPUT_PULLDOWN | MUX_MODE7)     /* (V3) GPIO0_9 */
 		>;
 	};
 
@@ -294,17 +300,17 @@
 		>;
 	};
 
-	ehrpwm0_pins_default: backlight_pins {
-		pinctrl-single,pins = <
-			0x150 0x3	/* (A17) spi0_sclk.ehrpwm0A */
-		>;
-	};
+	// ehrpwm0_pins_default: backlight_pins {
+	// 	pinctrl-single,pins = <
+	// 		0x150 0x3	/* (A17) spi0_sclk.ehrpwm0A */
+	// 	>;
+	// };
 
-	ehrpwm0_pins_sleep: ehrpwm0_pins_sleep {
-		pinctrl-single,pins = <
-			0x150  (PIN_INPUT_PULLDOWN | MUX_MODE3)	/* (A17) spi0_sclk.ehrpwm0A */
-		>;
-	};
+	// ehrpwm0_pins_sleep: ehrpwm0_pins_sleep {
+	// 	pinctrl-single,pins = <
+	// 		0x150  (PIN_INPUT_PULLDOWN | MUX_MODE3)	/* (A17) spi0_sclk.ehrpwm0A */
+	// 	>;
+	// };*/
 
 	cpsw_default: cpsw_default {
 		pinctrl-single,pins = <
@@ -430,71 +436,73 @@
 		>;
 	};
 
-	lcd_pins_default: lcd_pins_default {
-		pinctrl-single,pins = <
-//			0x20 (PIN_OUTPUT | MUX_MODE1)		/* gpmc_ad8.lcd_data23 */
-//			0x24 (PIN_OUTPUT | MUX_MODE1)		/* gpmc_ad9.lcd_data22 */
-//			0x28 (PIN_OUTPUT | MUX_MODE1)		/* gpmc_ad10.lcd_data21 */
-//			0x2c (PIN_OUTPUT | MUX_MODE1)		/* gpmc_ad11.lcd_data20 */
-//			0x30 (PIN_OUTPUT | MUX_MODE1)		/* gpmc_ad12.lcd_data19 */
-//			0x34 (PIN_OUTPUT | MUX_MODE1)		/* gpmc_ad13.lcd_data18 */
-//			0x38 (PIN_OUTPUT | MUX_MODE1)		/* gpmc_ad14.lcd_data17 */
-//			0x3c (PIN_OUTPUT | MUX_MODE1)		/* gpmc_ad15.lcd_data16 */
-			0xa0 (PIN_OUTPUT | MUX_MODE0)		/* lcd_data0.lcd_data0 */
-			0xa4 (PIN_OUTPUT | MUX_MODE0)		/* lcd_data1.lcd_data1 */
-			0xa8 (PIN_OUTPUT | MUX_MODE0)		/* lcd_data2.lcd_data2 */
-			0xac (PIN_OUTPUT | MUX_MODE0)		/* lcd_data3.lcd_data3 */
-			0xb0 (PIN_OUTPUT | MUX_MODE0)		/* lcd_data4.lcd_data4 */
-			0xb4 (PIN_OUTPUT | MUX_MODE0)		/* lcd_data5.lcd_data5 */
-			0xb8 (PIN_OUTPUT | MUX_MODE0)		/* lcd_data6.lcd_data6 */
-			0xbc (PIN_OUTPUT | MUX_MODE0)		/* lcd_data7.lcd_data7 */
-			0xc0 (PIN_OUTPUT | MUX_MODE0)		/* lcd_data8.lcd_data8 */
-			0xc4 (PIN_OUTPUT | MUX_MODE0)		/* lcd_data9.lcd_data9 */
-			0xc8 (PIN_OUTPUT | MUX_MODE0)		/* lcd_data10.lcd_data10 */
-			0xcc (PIN_OUTPUT | MUX_MODE0)		/* lcd_data11.lcd_data11 */
-			0xd0 (PIN_OUTPUT | MUX_MODE0)		/* lcd_data12.lcd_data12 */
-			0xd4 (PIN_OUTPUT | MUX_MODE0)		/* lcd_data13.lcd_data13 */
-			0xd8 (PIN_OUTPUT | MUX_MODE0)		/* lcd_data14.lcd_data14 */
-			0xdc (PIN_OUTPUT | MUX_MODE0)		/* lcd_data15.lcd_data15 */
-			0xe0 (PIN_OUTPUT | MUX_MODE0)		/* lcd_vsync.lcd_vsync */
-			0xe4 (PIN_OUTPUT | MUX_MODE0)		/* lcd_hsync.lcd_hsync */
-			0xe8 (PIN_OUTPUT | MUX_MODE0)		/* lcd_pclk.lcd_pclk */
-			0xec (PIN_OUTPUT | MUX_MODE0)		/* lcd_ac_bias_en.lcd_ac_bias_en */
-		>;
-	};
+// 	lcd_pins_default: lcd_pins_default {
+// 		pinctrl-single,pins = <
+// //			0x20 (PIN_OUTPUT | MUX_MODE1)		/* gpmc_ad8.lcd_data23 */
+// //			0x24 (PIN_OUTPUT | MUX_MODE1)		/* gpmc_ad9.lcd_data22 */
+// //			0x28 (PIN_OUTPUT | MUX_MODE1)		/* gpmc_ad10.lcd_data21 */
+// //			0x2c (PIN_OUTPUT | MUX_MODE1)		/* gpmc_ad11.lcd_data20 */
+// //			0x30 (PIN_OUTPUT | MUX_MODE1)		/* gpmc_ad12.lcd_data19 */
+// //			0x34 (PIN_OUTPUT | MUX_MODE1)		/* gpmc_ad13.lcd_data18 */
+// //			0x38 (PIN_OUTPUT | MUX_MODE1)		/* gpmc_ad14.lcd_data17 */
+// //			0x3c (PIN_OUTPUT | MUX_MODE1)		/* gpmc_ad15.lcd_data16 */
+// 			0xa0 (PIN_OUTPUT | MUX_MODE0)		/* lcd_data0.lcd_data0 */
+// 			0xa4 (PIN_OUTPUT | MUX_MODE0)		/* lcd_data1.lcd_data1 */
+// 			0xa8 (PIN_OUTPUT | MUX_MODE0)		/* lcd_data2.lcd_data2 */
+// 			0xac (PIN_OUTPUT | MUX_MODE0)		/* lcd_data3.lcd_data3 */
+// 			0xb0 (PIN_OUTPUT | MUX_MODE0)		/* lcd_data4.lcd_data4 */
+// 			0xb4 (PIN_OUTPUT | MUX_MODE0)		/* lcd_data5.lcd_data5 */
+// 			0xb8 (PIN_OUTPUT | MUX_MODE0)		/* lcd_data6.lcd_data6 */
+// 			0xbc (PIN_OUTPUT | MUX_MODE0)		/* lcd_data7.lcd_data7 */
+// 			0xc0 (PIN_OUTPUT | MUX_MODE0)		/* lcd_data8.lcd_data8 */
+// 			0xc4 (PIN_OUTPUT | MUX_MODE0)		/* lcd_data9.lcd_data9 */
+// 			0xc8 (PIN_OUTPUT | MUX_MODE0)		/* lcd_data10.lcd_data10 */
+// 			0xcc (PIN_OUTPUT | MUX_MODE0)		/* lcd_data11.lcd_data11 */
+// 			0xd0 (PIN_OUTPUT | MUX_MODE0)		/* lcd_data12.lcd_data12 */
+// 			0xd4 (PIN_OUTPUT | MUX_MODE0)		/* lcd_data13.lcd_data13 */
+// 			0xd8 (PIN_OUTPUT | MUX_MODE0)		/* lcd_data14.lcd_data14 */
+// 			0xdc (PIN_OUTPUT | MUX_MODE0)		/* lcd_data15.lcd_data15 */
+// 			0xe0 (PIN_OUTPUT | MUX_MODE0)		/* lcd_vsync.lcd_vsync */
+// 			0xe4 (PIN_OUTPUT | MUX_MODE0)		/* lcd_hsync.lcd_hsync */
+// 			0xe8 (PIN_OUTPUT | MUX_MODE0)		/* lcd_pclk.lcd_pclk */
+// 			0xec (PIN_OUTPUT | MUX_MODE0)		/* lcd_ac_bias_en.lcd_ac_bias_en */
+// 		>;
+// 	};
 
-	lcd_pins_sleep: lcd_pins_sleep {
-		pinctrl-single,pins = <
-//			0x20 (PIN_INPUT_PULLDOWN | MUX_MODE7)	/* gpmc_ad8.lcd_data16 */
-//			0x24 (PIN_INPUT_PULLDOWN | MUX_MODE7)	/* gpmc_ad9.lcd_data17 */
-//			0x28 (PIN_INPUT_PULLDOWN | MUX_MODE7)	/* gpmc_ad10.lcd_data18 */
-//			0x2c (PIN_INPUT_PULLDOWN | MUX_MODE7)	/* gpmc_ad11.lcd_data19 */
-//			0x30 (PIN_INPUT_PULLDOWN | MUX_MODE7)	/* gpmc_ad12.lcd_data20 */
-//			0x34 (PIN_INPUT_PULLDOWN | MUX_MODE7)	/* gpmc_ad13.lcd_data21 */
-//			0x38 (PIN_INPUT_PULLDOWN | MUX_MODE7)	/* gpmc_ad14.lcd_data22 */
-//			0x3c (PIN_INPUT_PULLDOWN | MUX_MODE7)	/* gpmc_ad15.lcd_data23 */
-			0xa0 (PULL_DISABLE | MUX_MODE7)		/* lcd_data0.lcd_data0 */
-			0xa4 (PULL_DISABLE | MUX_MODE7)		/* lcd_data1.lcd_data1 */
-			0xa8 (PULL_DISABLE | MUX_MODE7)		/* lcd_data2.lcd_data2 */
-			0xac (PULL_DISABLE | MUX_MODE7)		/* lcd_data3.lcd_data3 */
-			0xb0 (PULL_DISABLE | MUX_MODE7)		/* lcd_data4.lcd_data4 */
-			0xb4 (PULL_DISABLE | MUX_MODE7)		/* lcd_data5.lcd_data5 */
-			0xb8 (PULL_DISABLE | MUX_MODE7)		/* lcd_data6.lcd_data6 */
-			0xbc (PULL_DISABLE | MUX_MODE7)		/* lcd_data7.lcd_data7 */
-			0xc0 (PULL_DISABLE | MUX_MODE7)		/* lcd_data8.lcd_data8 */
-			0xc4 (PULL_DISABLE | MUX_MODE7)		/* lcd_data9.lcd_data9 */
-			0xc8 (PULL_DISABLE | MUX_MODE7)		/* lcd_data10.lcd_data10 */
-			0xcc (PULL_DISABLE | MUX_MODE7)		/* lcd_data11.lcd_data11 */
-			0xd0 (PULL_DISABLE | MUX_MODE7)		/* lcd_data12.lcd_data12 */
-			0xd4 (PULL_DISABLE | MUX_MODE7)		/* lcd_data13.lcd_data13 */
-			0xd8 (PULL_DISABLE | MUX_MODE7)		/* lcd_data14.lcd_data14 */
-			0xdc (PULL_DISABLE | MUX_MODE7)		/* lcd_data15.lcd_data15 */
-			0xe0 (PIN_INPUT_PULLDOWN | MUX_MODE7)	/* lcd_vsync.lcd_vsync, OUTPUT | MODE0 */
-			0xe4 (PIN_INPUT_PULLDOWN | MUX_MODE7)	/* lcd_hsync.lcd_hsync */
-			0xe8 (PIN_INPUT_PULLDOWN | MUX_MODE7)	/* lcd_pclk.lcd_pclk */
-			0xec (PIN_INPUT_PULLDOWN | MUX_MODE7)	/* lcd_ac_bias_en.lcd_ac_bias_en */
-		>;
-	};
+// 	lcd_pins_sleep: lcd_pins_sleep {
+// 		pinctrl-single,pins = <
+// //			0x20 (PIN_INPUT_PULLDOWN | MUX_MODE7)	/* gpmc_ad8.lcd_data16 */
+// //			0x24 (PIN_INPUT_PULLDOWN | MUX_MODE7)	/* gpmc_ad9.lcd_data17 */
+// //			0x28 (PIN_INPUT_PULLDOWN | MUX_MODE7)	/* gpmc_ad10.lcd_data18 */
+// //			0x2c (PIN_INPUT_PULLDOWN | MUX_MODE7)	/* gpmc_ad11.lcd_data19 */
+// //			0x30 (PIN_INPUT_PULLDOWN | MUX_MODE7)	/* gpmc_ad12.lcd_data20 */
+// //			0x34 (PIN_INPUT_PULLDOWN | MUX_MODE7)	/* gpmc_ad13.lcd_data21 */
+// //			0x38 (PIN_INPUT_PULLDOWN | MUX_MODE7)	/* gpmc_ad14.lcd_data22 */
+// //			0x3c (PIN_INPUT_PULLDOWN | MUX_MODE7)	/* gpmc_ad15.lcd_data23 */
+// 			0xa0 (PULL_DISABLE | MUX_MODE7)		/* lcd_data0.lcd_data0 */
+// 			0xa4 (PULL_DISABLE | MUX_MODE7)		/* lcd_data1.lcd_data1 */
+// 			0xa8 (PULL_DISABLE | MUX_MODE7)		/* lcd_data2.lcd_data2 */
+// 			0xac (PULL_DISABLE | MUX_MODE7)		/* lcd_data3.lcd_data3 */
+// 			0xb0 (PULL_DISABLE | MUX_MODE7)		/* lcd_data4.lcd_data4 */
+// 			0xb4 (PULL_DISABLE | MUX_MODE7)		/* lcd_data5.lcd_data5 */
+// 			0xb8 (PULL_DISABLE | MUX_MODE7)		/* lcd_data6.lcd_data6 */
+// 			0xbc (PULL_DISABLE | MUX_MODE7)		/* lcd_data7.lcd_data7 */
+// 			0xc0 (PULL_DISABLE | MUX_MODE7)		/* lcd_data8.lcd_data8 */
+// 			0xc4 (PULL_DISABLE | MUX_MODE7)		/* lcd_data9.lcd_data9 */
+// 			0xc8 (PULL_DISABLE | MUX_MODE7)		/* lcd_data10.lcd_data10 */
+// 			0xcc (PULL_DISABLE | MUX_MODE7)		/* lcd_data11.lcd_data11 */
+// 			0xd0 (PULL_DISABLE | MUX_MODE7)		/* lcd_data12.lcd_data12 */
+// 			0xd4 (PULL_DISABLE | MUX_MODE7)		/* lcd_data13.lcd_data13 */
+// 			0xd8 (PULL_DISABLE | MUX_MODE7)		/* lcd_data14.lcd_data14 */
+// 			0xdc (PULL_DISABLE | MUX_MODE7)		/* lcd_data15.lcd_data15 */
+// 			0xe0 (PIN_INPUT_PULLDOWN | MUX_MODE7)	/* lcd_vsync.lcd_vsync, OUTPUT | MODE0 */
+// 			0xe4 (PIN_INPUT_PULLDOWN | MUX_MODE7)	/* lcd_hsync.lcd_hsync */
+// 			0xe8 (PIN_INPUT_PULLDOWN | MUX_MODE7)	/* lcd_pclk.lcd_pclk */
+// 			0xec (PIN_INPUT_PULLDOWN | MUX_MODE7)	/* lcd_ac_bias_en.lcd_ac_bias_en */
+// 		>;
+// 	};
+
+
 	spi1_pins_default: spi1_pins_default {
 		pinctrl-single,pins = <
 			0x190 ( PIN_INPUT | MUX_MODE3 ) /* (A13) mcasp0_aclkx.spi1_sclk */
@@ -561,14 +569,20 @@
 	pinctrl-names = "default", "sleep";
 	pinctrl-0 = <&uart4_pins_default>;
 	pinctrl-1 = <&uart4_pins_sleep>;
-
+	linux,rs485-enabled-at-boot-time;
+	rs485-rts-delay = <0 0>; // <a b> a for start of packet, b end of packet in milliseconds
+	rs485-rts-active-high; // sets rts active high
+	rts-gpio = <&gpio1 28 GPIO_ACTIVE_HIGH>;
 	status = "okay";
 };
 &uart5 {
 	pinctrl-names = "default", "sleep";
 	pinctrl-0 = <&uart5_pins_default>;
 	pinctrl-1 = <&uart5_pins_sleep>;
-
+	linux,rs485-enabled-at-boot-time;
+	rs485-rts-delay = <0 0>; // <a b> a for start of packet, b end of packet in milliseconds
+	rs485-rts-active-high; // sets rts active high
+	rts-gpio = <&gpio0 9 GPIO_ACTIVE_HIGH>;
 	status = "okay";
 };
 
@@ -653,19 +667,19 @@
 
 
 };
-
+/*
 &lcdc {
 	status = "disabled";
 	pinctrl-names = "default", "sleep";
 	pinctrl-0 = <&lcd_pins_default>;
 	pinctrl-1 = <&lcd_pins_sleep>;
 };
-
+*/
 &elm {
 	status = "okay";
 };
 
-&epwmss0 {
+/*&epwmss0 {
 	status = "okay";
 
 	ehrpwm0: pwm@48300200 {
@@ -674,7 +688,7 @@
 		pinctrl-0 = <&ehrpwm0_pins_default>;
 		pinctrl-1 = <&ehrpwm0_pins_sleep>;
 	};
-};
+};*/
 
 &gpmc {
 	status = "okay";
@@ -858,8 +872,8 @@
     };
 
 &cpsw_emac0 {
-	phy-mode = "rgmii-id";
-	//dual_emac_res_vlan=<1>;
+	phy-mode = "rgmii-rxid";
+	dual_emac_res_vlan=<1>;
 	fixed-link {
     	speed = <1000>;
     	full-duplex;
@@ -867,10 +881,10 @@
 };
 
 &cpsw_emac1 {
-	phy-mode = "rgmii-id";
-	//dual_emac_res_vlan=<2>;
+	phy-mode = "rgmii-rxid";
+	dual_emac_res_vlan=<2>;
 	fixed-link {
-    	speed = <10>;
+    	speed = <1000>;
     	full-duplex;
     };
 };
@@ -897,7 +911,7 @@
 	pinctrl-names = "default", "sleep";
 	pinctrl-0 = <&mmc1_pins_default>;
 	pinctrl-1 = <&mmc1_pins_sleep>;
-	broken-cd;
+	cd-gpios = <&gpio3 21 GPIO_ACTIVE_HIGH>;
 };
 
 &mmc3 {
