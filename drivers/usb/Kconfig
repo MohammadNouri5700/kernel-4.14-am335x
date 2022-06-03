@@ -164,6 +164,8 @@ source "drivers/usb/misc/Kconfig"
 
 source "drivers/usb/atm/Kconfig"
 
+source "drivers/usb/rtl8192u/Kconfig"
+
 endif # USB
 
 source "drivers/usb/phy/Kconfig"
