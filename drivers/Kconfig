@@ -89,8 +89,6 @@ source "drivers/regulator/Kconfig"
 
 source "drivers/media/Kconfig"
 
-source "drivers/video/Kconfig"
-
 source "sound/Kconfig"
 
 source "drivers/hid/Kconfig"
