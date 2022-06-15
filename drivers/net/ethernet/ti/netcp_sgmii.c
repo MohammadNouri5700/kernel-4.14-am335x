@@ -83,14 +83,13 @@ bool netcp_sgmii_rtreset(void __iomem *sgmii_ofs, int port, bool set)
 	return oldval;
 }
 
-bool netcp_sgmii_get_port_link(void __iomem *sgmii_ofs, int port)
+int netcp_sgmii_get_port_link(void __iomem *sgmii_ofs, int port)
 {
-	u32 status = 0;
-	bool link = false;
+	u32 status = 0, link = 0;
 
 	status = sgmii_read_reg(sgmii_ofs, SGMII_STATUS_REG(port));
 	if ((status & SGMII_REG_STATUS_LINK) != 0)
-		link = true;
+		link = 1;
 	return link;
 }
 
