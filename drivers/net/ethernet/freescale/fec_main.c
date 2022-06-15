@@ -64,6 +64,22 @@
 
 #include <asm/cacheflush.h>
 
+#if defined(CONFIG_KSZ_SWITCH)
+#define HAVE_KSZ_SWITCH
+#endif
+
+#if defined(CONFIG_HAVE_KSZ9897)
+#include "../micrel/ksz_cfg_9897.h"
+#if 0
+#include "../micrel/ksz_spi_net.h"
+#endif
+
+static inline int sw_is_switch(struct ksz_sw *sw)
+{
+	return sw != NULL;
+}
+#endif
+
 #include "fec.h"
 
 static void set_multicast_list(struct net_device *ndev);
@@ -89,10 +105,10 @@ static struct platform_device_id fec_devtype[] = {
 		.driver_data = 0,
 	}, {
 		.name = "imx25-fec",
-		.driver_data = FEC_QUIRK_USE_GASKET | FEC_QUIRK_MIB_CLEAR,
+		.driver_data = FEC_QUIRK_USE_GASKET,
 	}, {
 		.name = "imx27-fec",
-		.driver_data = FEC_QUIRK_MIB_CLEAR,
+		.driver_data = 0,
 	}, {
 		.name = "imx28-fec",
 		.driver_data = FEC_QUIRK_ENET_MAC | FEC_QUIRK_SWAP_FRAME |
@@ -117,9 +133,8 @@ static struct platform_device_id fec_devtype[] = {
 		.name = "imx6ul-fec",
 		.driver_data = FEC_QUIRK_ENET_MAC | FEC_QUIRK_HAS_GBIT |
 				FEC_QUIRK_HAS_BUFDESC_EX | FEC_QUIRK_HAS_CSUM |
-				FEC_QUIRK_HAS_VLAN | FEC_QUIRK_ERR007885 |
-				FEC_QUIRK_BUG_CAPTURE | FEC_QUIRK_HAS_RACC |
-				FEC_QUIRK_HAS_COALESCE,
+				FEC_QUIRK_HAS_VLAN | FEC_QUIRK_BUG_CAPTURE |
+				FEC_QUIRK_HAS_RACC | FEC_QUIRK_HAS_COALESCE,
 	}, {
 		/* sentinel */
 	}
@@ -186,9 +201,6 @@ MODULE_PARM_DESC(macaddr, "FEC Ethernet MAC address");
 #define FEC_RACC_SHIFT16	BIT(7)
 #define FEC_RACC_OPTIONS	(FEC_RACC_IPDIS | FEC_RACC_PRODIS)
 
-/* MIB Control Register */
-#define FEC_MIB_CTRLSTAT_DISABLE	BIT(31)
-
 /*
  * The 5270/5271/5280/5282/532x RX control register also contains maximum frame
  * size bits. Other FEC hardware does not, so we need to take that into
@@ -226,6 +238,7 @@ MODULE_PARM_DESC(macaddr, "FEC Ethernet MAC address");
 
 #define COPYBREAK_DEFAULT	256
 
+#define TSO_HEADER_SIZE		128
 /* Max number of allowed TCP segments for software TSO */
 #define FEC_MAX_TSO_SEGS	100
 #define FEC_MAX_SKB_DESCS	(FEC_MAX_TSO_SEGS * 2 + MAX_SKB_FRAGS)
@@ -240,14 +253,14 @@ static struct bufdesc *fec_enet_get_nextdesc(struct bufdesc *bdp,
 					     struct bufdesc_prop *bd)
 {
 	return (bdp >= bd->last) ? bd->base
-			: (struct bufdesc *)(((void *)bdp) + bd->dsize);
+			: (struct bufdesc *)(((unsigned)bdp) + bd->dsize);
 }
 
 static struct bufdesc *fec_enet_get_prevdesc(struct bufdesc *bdp,
 					     struct bufdesc_prop *bd)
 {
 	return (bdp <= bd->base) ? bd->last
-			: (struct bufdesc *)(((void *)bdp) - bd->dsize);
+			: (struct bufdesc *)(((unsigned)bdp) - bd->dsize);
 }
 
 static int fec_enet_get_bd_index(struct bufdesc *bdp,
@@ -449,6 +462,19 @@ static int fec_enet_txq_submit_skb(struct fec_enet_priv_tx_q *txq,
 		dev_kfree_skb_any(skb);
 		return NETDEV_TX_OK;
 	}
+
+#if defined(HAVE_KSZ_SWITCH)
+	do {
+		struct ksz_sw *sw = fep->sw;
+
+		if (sw_is_switch(sw)) {
+			skb = sw->net_ops->final_skb(sw, skb, ndev, &fep->port);
+			if (!skb)
+				return NETDEV_TX_OK;
+			nr_frags = skb_shinfo(skb)->nr_frags;
+		}
+	} while (0);
+#endif
 
 	/* Fill in a Tx ring entry */
 	bdp = txq->bd.cur;
@@ -1155,7 +1181,7 @@ static void fec_enet_timeout_work(struct work_struct *work)
 		napi_disable(&fep->napi);
 		netif_tx_lock_bh(ndev);
 		fec_restart(ndev);
-		netif_wake_queue(ndev);
+		netif_tx_wake_all_queues(ndev);
 		netif_tx_unlock_bh(ndev);
 		napi_enable(&fep->napi);
 	}
@@ -1270,14 +1296,14 @@ skb_done:
 
 		/* Since we have freed up a buffer, the ring is no longer full
 		 */
-		if (netif_queue_stopped(ndev)) {
+		if (netif_tx_queue_stopped(nq)) {
 			entries_free = fec_enet_get_free_txdesc_num(txq);
 			if (entries_free >= txq->tx_wake_threshold)
 				netif_tx_wake_queue(nq);
 		}
 	}
 
-	/* ERR006358: Keep the transmitter going */
+	/* ERR006538: Keep the transmitter going */
 	if (bdp != txq->bd.cur &&
 	    readl(txq->bd.reg_desc_active) == 0)
 		writel(0, txq->bd.reg_desc_active);
@@ -1342,6 +1368,74 @@ static bool fec_enet_copybreak(struct net_device *ndev, struct sk_buff **skb,
 	return true;
 }
 
+static struct fec_enet_private *sw_rx_proc(struct ksz_sw *sw,
+					   struct sk_buff *skb)
+{
+	struct net_device *parent_dev = NULL;
+	struct sk_buff *parent_skb = NULL;
+	struct net_device *dev;
+	struct fec_enet_private *priv;
+	int len = skb->len;
+	int rx_port = 0;
+	int tag = 0;
+#if defined(CONFIG_KSZ_SWITCH) || defined(CONFIG_1588_PTP)
+	int forward = 0;
+	void *ptr = NULL;
+	void (*rx_tstamp)(void *ptr, struct sk_buff *skb) = NULL;
+#endif
+
+	*parent_skb = NULL;
+
+	dev = sw->net_ops->rx_dev(sw, skb->data, &len, &tag, &rx_port);
+	if (!dev) {
+		dev_kfree_skb_any(skb);
+		return NULL;
+	}
+
+	/* vlan_get_tag requires network device in socket buffer. */
+	skb->dev = dev;
+
+	/* skb_put is already used. */
+	if (len != skb->len) {
+		int diff = skb->len - len;
+
+		skb->len -= diff;
+		skb->tail -= diff;
+	}
+
+	/* Internal packets handled by the switch. */
+	if (!sw->net_ops->drv_rx(sw, skb, rx_port)) {
+		return NULL;
+	}
+
+#ifdef CONFIG_KSZ_SWITCH
+	/* Need to forward to VLAN devices for PAE messages. */
+	if (!forward) {
+		struct ethhdr *eth = (struct ethhdr *) skb->data;
+
+		if (eth->h_proto == htons(0x888E))
+			forward = FWD_VLAN_DEV | FWD_STP_DEV;
+	}
+
+	/* No VLAN port forwarding; need to send to parent. */
+	if ((forward & FWD_VLAN_DEV) && !tag)
+		forward &= ~FWD_VLAN_DEV;
+	dev = sw->net_ops->parent_rx(sw, dev, skb, &forward, &parent_dev,
+		&parent_skb);
+
+	/* dev may change. */
+	if (dev != skb->dev) {
+		skb->dev = dev;
+		priv = netdev_priv(dev);
+	}
+
+	sw->net_ops->port_vlan_rx(sw, dev, parent_dev, skb,
+		forward, tag, ptr, rx_tstamp);
+#endif
+	return priv;
+}  /* sw_rx_proc */
+#endif
+
 /* During a receive, the bd_rx.cur points to the current incoming buffer.
  * When we update through the ring, if the next incoming buffer has
  * not been given to the system, we just set the empty indicator,
@@ -1365,6 +1459,9 @@ fec_enet_rx_queue(struct net_device *ndev, int budget, u16 queue_id)
 	int	index = 0;
 	bool	is_copybreak;
 	bool	need_swap = fep->quirks & FEC_QUIRK_SWAP_FRAME;
+#ifdef HAVE_KSZ_SWITCH
+	struct ksz_sw *sw = fep->sw;
+#endif
 
 #ifdef CONFIG_M532x
 	flush_cache_all();
@@ -1470,6 +1567,16 @@ fec_enet_rx_queue(struct net_device *ndev, int budget, u16 queue_id)
 			skb_pull(skb, VLAN_HLEN);
 		}
 
+#ifdef HAVE_KSZ_SWITCH
+		if (sw_is_switch(sw)) {
+			struct fec_enet_priv *hw_priv;
+
+			hw_priv = sw_rx_proc(sw, skb);
+			if (!hw_priv)
+				goto rx_processing_done;
+		}
+#endif
+
 		skb->protocol = eth_type_trans(skb, ndev);
 
 		/* Get receive timestamp from the skb */
@@ -1565,14 +1672,14 @@ fec_enet_collect_events(struct fec_enet_private *fep, uint int_events)
 	if (int_events == 0)
 		return false;
 
-	if (int_events & FEC_ENET_RXF_0)
+	if (int_events & FEC_ENET_RXF)
 		fep->work_rx |= (1 << 2);
 	if (int_events & FEC_ENET_RXF_1)
 		fep->work_rx |= (1 << 0);
 	if (int_events & FEC_ENET_RXF_2)
 		fep->work_rx |= (1 << 1);
 
-	if (int_events & FEC_ENET_TXF_0)
+	if (int_events & FEC_ENET_TXF)
 		fep->work_tx |= (1 << 2);
 	if (int_events & FEC_ENET_TXF_1)
 		fep->work_tx |= (1 << 0);
@@ -1610,8 +1717,8 @@ fec_enet_interrupt(int irq, void *dev_id)
 	}
 
 	if (fep->ptp_clock)
-		if (fec_ptp_check_pps_event(fep))
-			ret = IRQ_HANDLED;
+		fec_ptp_check_pps_event(fep);
+
 	return ret;
 }
 
@@ -1626,7 +1733,7 @@ static int fec_enet_rx_napi(struct napi_struct *napi, int budget)
 	fec_enet_tx(ndev);
 
 	if (pkts < budget) {
-		napi_complete_done(napi, pkts);
+		napi_complete(napi);
 		writel(FEC_DEFAULT_IMASK, fep->hwp + FEC_IMASK);
 	}
 	return pkts;
@@ -1747,7 +1854,7 @@ static void fec_enet_adjust_link(struct net_device *ndev)
 			napi_disable(&fep->napi);
 			netif_tx_lock_bh(ndev);
 			fec_restart(ndev);
-			netif_wake_queue(ndev);
+			netif_tx_wake_all_queues(ndev);
 			netif_tx_unlock_bh(ndev);
 			napi_enable(&fep->napi);
 		}
@@ -1852,11 +1959,11 @@ static int fec_enet_clk_enable(struct net_device *ndev, bool enable)
 		ret = clk_prepare_enable(fep->clk_ahb);
 		if (ret)
 			return ret;
-
-		ret = clk_prepare_enable(fep->clk_enet_out);
-		if (ret)
-			goto failed_clk_enet_out;
-
+		if (fep->clk_enet_out) {
+			ret = clk_prepare_enable(fep->clk_enet_out);
+			if (ret)
+				goto failed_clk_enet_out;
+		}
 		if (fep->clk_ptp) {
 			mutex_lock(&fep->ptp_clk_mutex);
 			ret = clk_prepare_enable(fep->clk_ptp);
@@ -1868,20 +1975,23 @@ static int fec_enet_clk_enable(struct net_device *ndev, bool enable)
 			}
 			mutex_unlock(&fep->ptp_clk_mutex);
 		}
-
-		ret = clk_prepare_enable(fep->clk_ref);
-		if (ret)
-			goto failed_clk_ref;
+		if (fep->clk_ref) {
+			ret = clk_prepare_enable(fep->clk_ref);
+			if (ret)
+				goto failed_clk_ref;
+		}
 	} else {
 		clk_disable_unprepare(fep->clk_ahb);
-		clk_disable_unprepare(fep->clk_enet_out);
+		if (fep->clk_enet_out)
+			clk_disable_unprepare(fep->clk_enet_out);
 		if (fep->clk_ptp) {
 			mutex_lock(&fep->ptp_clk_mutex);
 			clk_disable_unprepare(fep->clk_ptp);
 			fep->ptp_clk_on = false;
 			mutex_unlock(&fep->ptp_clk_mutex);
 		}
-		clk_disable_unprepare(fep->clk_ref);
+		if (fep->clk_ref)
+			clk_disable_unprepare(fep->clk_ref);
 	}
 
 	return 0;
@@ -1906,15 +2016,16 @@ static int fec_enet_mii_probe(struct net_device *ndev)
 	char phy_name[MII_BUS_ID_SIZE + 3];
 	int phy_id;
 	int dev_id = fep->dev_id;
+#if defined(HAVE_KSZ_SWITCH)
+	struct ksz_sw *sw = fep->sw;
+#endif
 
 	if (fep->phy_node) {
 		phy_dev = of_phy_connect(ndev, fep->phy_node,
 					 &fec_enet_adjust_link, 0,
 					 fep->phy_interface);
-		if (!phy_dev) {
-			netdev_err(ndev, "Unable to connect to phy\n");
+		if (!phy_dev)
 			return -ENODEV;
-		}
 	} else {
 		/* check for attached phy */
 		for (phy_id = 0; (phy_id < PHY_MAX_ADDR); phy_id++) {
@@ -1932,10 +2043,19 @@ static int fec_enet_mii_probe(struct net_device *ndev)
 			phy_id = 0;
 		}
 
+#if defined(HAVE_KSZ_SWITCH)
+		if (sw_is_switch(sw)) {
+			phy_dev = sw->phydev;
+			phy_dev->attached_dev = ndev;
+			phy_dev->adjust_link = fec_enet_adjust_link;
+		} else
+			return -ENODEV;
+#else
 		snprintf(phy_name, sizeof(phy_name),
 			 PHY_ID_FMT, mdio_bus_id, phy_id);
 		phy_dev = phy_connect(ndev, phy_name, &fec_enet_adjust_link,
 				      fep->phy_interface);
+#endif
 	}
 
 	if (IS_ERR(phy_dev)) {
@@ -1958,6 +2078,13 @@ static int fec_enet_mii_probe(struct net_device *ndev)
 
 	fep->link = 0;
 	fep->full_duplex = 0;
+#if defined(HAVE_KSZ_SWITCH)
+	if (sw_is_switch(sw)) {
+		sw->net_ops->open_dev(sw, ndev, ndev->dev_addr);
+		sw->net_ops->open_port(sw, ndev, &fep->port, &fep->state);
+		sw->net_ops->open(sw);
+	}
+#endif
 
 	phy_attached_info(phy_dev);
 
@@ -2014,7 +2141,7 @@ static int fec_enet_mii_init(struct platform_device *pdev)
 		mii_speed--;
 	if (mii_speed > 63) {
 		dev_err(&pdev->dev,
-			"fec clock (%lu) too fast to get right mii speed\n",
+			"fec clock (%lu) to fast to get right mii speed\n",
 			clk_get_rate(fep->clk_ipg));
 		err = -EINVAL;
 		goto err_out;
@@ -2249,7 +2376,7 @@ static int fec_enet_set_pauseparam(struct net_device *ndev,
 		napi_disable(&fep->napi);
 		netif_tx_lock_bh(ndev);
 		fec_restart(ndev);
-		netif_wake_queue(ndev);
+		netif_tx_wake_all_queues(ndev);
 		netif_tx_unlock_bh(ndev);
 		napi_enable(&fep->napi);
 	}
@@ -2368,21 +2495,6 @@ static int fec_enet_get_sset_count(struct net_device *dev, int sset)
 	}
 }
 
-static void fec_enet_clear_ethtool_stats(struct net_device *dev)
-{
-	struct fec_enet_private *fep = netdev_priv(dev);
-	int i;
-
-	/* Disable MIB statistics counters */
-	writel(FEC_MIB_CTRLSTAT_DISABLE, fep->hwp + FEC_MIB_CTRLSTAT);
-
-	for (i = 0; i < ARRAY_SIZE(fec_stats); i++)
-		writel(0, fep->hwp + fec_stats[i].offset);
-
-	/* Don't disable MIB statistics counters */
-	writel(0, fep->hwp + FEC_MIB_CTRLSTAT);
-}
-
 #else	/* !defined(CONFIG_M5272) */
 #define FEC_STATS_SIZE	0
 static inline void fec_enet_update_ethtool_stats(struct net_device *dev)
@@ -2393,6 +2505,16 @@ static inline void fec_enet_clear_ethtool_stats(struct net_device *dev)
 {
 }
 #endif /* !defined(CONFIG_M5272) */
+
+static int fec_enet_nway_reset(struct net_device *dev)
+{
+	struct phy_device *phydev = dev->phydev;
+
+	if (!phydev)
+		return -ENODEV;
+
+	return genphy_restart_aneg(phydev);
+}
 
 /* ITR clock source is enet system clock (clk_ahb).
  * TCTT unit is cycle_ns * 64 cycle
@@ -2593,7 +2715,7 @@ static const struct ethtool_ops fec_enet_ethtool_ops = {
 	.get_drvinfo		= fec_enet_get_drvinfo,
 	.get_regs_len		= fec_enet_get_regs_len,
 	.get_regs		= fec_enet_get_regs,
-	.nway_reset		= phy_ethtool_nway_reset,
+	.nway_reset		= fec_enet_nway_reset,
 	.get_link		= ethtool_op_get_link,
 	.get_coalesce		= fec_enet_get_coalesce,
 	.set_coalesce		= fec_enet_set_coalesce,
@@ -2683,7 +2805,7 @@ static void fec_enet_free_queue(struct net_device *ndev)
 	for (i = 0; i < fep->num_tx_queues; i++)
 		if (fep->tx_queue[i] && fep->tx_queue[i]->tso_hdrs) {
 			txq = fep->tx_queue[i];
-			dma_free_coherent(&fep->pdev->dev,
+			dma_free_coherent(NULL,
 					  txq->bd.ring_size * TSO_HEADER_SIZE,
 					  txq->tso_hdrs,
 					  txq->tso_hdrs_dma);
@@ -2717,7 +2839,7 @@ static int fec_enet_alloc_queue(struct net_device *ndev)
 		txq->tx_wake_threshold =
 			(txq->bd.ring_size - txq->tx_stop_threshold) / 2;
 
-		txq->tso_hdrs = dma_alloc_coherent(&fep->pdev->dev,
+		txq->tso_hdrs = dma_alloc_coherent(NULL,
 					txq->bd.ring_size * TSO_HEADER_SIZE,
 					&txq->tso_hdrs_dma,
 					GFP_KERNEL);
@@ -2897,15 +3019,28 @@ static int
 fec_enet_close(struct net_device *ndev)
 {
 	struct fec_enet_private *fep = netdev_priv(ndev);
+#if defined(HAVE_KSZ_SWITCH)
+	struct ksz_sw *sw = fep->sw;
+#endif
 
 	phy_stop(ndev->phydev);
 
 	if (netif_device_present(ndev)) {
 		napi_disable(&fep->napi);
 		netif_tx_disable(ndev);
+#if defined(HAVE_KSZ_SWITCH)
+		if (sw_is_switch(sw)) {
+			sw->net_ops->close_port(sw, ndev, &fep->port);
+			sw->net_ops->close(sw);
+			sw->net_ops->stop(sw, true);
+		}
+#endif
 		fec_stop(ndev);
 	}
 
+#if defined(HAVE_KSZ_SWITCH)
+	if (!sw)
+#endif
 	phy_disconnect(ndev->phydev);
 
 	if (fep->quirks & FEC_QUIRK_ERR006687)
@@ -2979,7 +3114,7 @@ static void set_multicast_list(struct net_device *ndev)
 		}
 
 		/* only upper 6 bits (FEC_HASH_BITS) are used
-		 * which point to specific bit in the hash registers
+		 * which point to specific bit in he hash registers
 		 */
 		hash = (crc >> (32 - FEC_HASH_BITS)) & 0x3f;
 
@@ -3084,11 +3219,34 @@ static int fec_set_features(struct net_device *netdev,
 	return 0;
 }
 
+#ifdef CONFIG_KSZ_SWITCH
+static int netdev_add_vid(struct net_device *dev, __be16 proto, u16 vid)
+{
+	struct fec_enet_private *fep = netdev_priv(dev);
+	struct ksz_sw *sw = fep->sw;
+
+	if (sw_is_switch(sw))
+		sw->net_ops->add_vid(sw, vid);
+	return 0;
+}
+
+static int netdev_kill_vid(struct net_device *dev, __be16 proto, u16 vid)
+{
+	struct fec_enet_private *fep = netdev_priv(dev);
+	struct ksz_sw *sw = fep->sw;
+
+	if (sw_is_switch(sw))
+		sw->net_ops->kill_vid(sw, vid);
+	return 0;
+}
+#endif
+
 static const struct net_device_ops fec_netdev_ops = {
 	.ndo_open		= fec_enet_open,
 	.ndo_stop		= fec_enet_close,
 	.ndo_start_xmit		= fec_enet_start_xmit,
 	.ndo_set_rx_mode	= set_multicast_list,
+	.ndo_change_mtu		= eth_change_mtu,
 	.ndo_validate_addr	= eth_validate_addr,
 	.ndo_tx_timeout		= fec_timeout,
 	.ndo_set_mac_address	= fec_set_mac_address,
@@ -3097,6 +3255,10 @@ static const struct net_device_ops fec_netdev_ops = {
 	.ndo_poll_controller	= fec_poll_controller,
 #endif
 	.ndo_set_features	= fec_set_features,
+#ifdef CONFIG_KSZ_SWITCH
+	.ndo_vlan_rx_add_vid	= netdev_add_vid,
+	.ndo_vlan_rx_kill_vid	= netdev_kill_vid,
+#endif
 };
 
 static const unsigned short offset_des_active_rxq[] = {
@@ -3213,10 +3375,7 @@ static int fec_enet_init(struct net_device *ndev)
 
 	fec_restart(ndev);
 
-	if (fep->quirks & FEC_QUIRK_MIB_CLEAR)
-		fec_enet_clear_ethtool_stats(ndev);
-	else
-		fec_enet_update_ethtool_stats(ndev);
+	fec_enet_update_ethtool_stats(ndev);
 
 	return 0;
 }
@@ -3226,15 +3385,15 @@ static int fec_reset_phy(struct platform_device *pdev)
 {
 	int err, phy_reset;
 	bool active_high = false;
-	int msec = 1, phy_post_delay = 0;
+	int msec = 1;
 	struct device_node *np = pdev->dev.of_node;
 
 	if (!np)
 		return 0;
 
-	err = of_property_read_u32(np, "phy-reset-duration", &msec);
+	of_property_read_u32(np, "phy-reset-duration", &msec);
 	/* A sane reset duration should not be longer than 1s */
-	if (!err && msec > 1000)
+	if (msec > 1000)
 		msec = 1;
 
 	phy_reset = of_get_named_gpio(np, "phy-reset-gpios", 0);
@@ -3242,11 +3401,6 @@ static int fec_reset_phy(struct platform_device *pdev)
 		return phy_reset;
 	else if (!gpio_is_valid(phy_reset))
 		return 0;
-
-	err = of_property_read_u32(np, "phy-reset-post-delay", &phy_post_delay);
-	/* valid reset duration should be less than 1s */
-	if (!err && phy_post_delay > 1000)
-		return -EINVAL;
 
 	active_high = of_property_read_bool(np, "phy-reset-active-high");
 
@@ -3264,15 +3418,6 @@ static int fec_reset_phy(struct platform_device *pdev)
 		usleep_range(msec * 1000, msec * 1000 + 1000);
 
 	gpio_set_value_cansleep(phy_reset, !active_high);
-
-	if (!phy_post_delay)
-		return 0;
-
-	if (phy_post_delay > 20)
-		msleep(phy_post_delay);
-	else
-		usleep_range(phy_post_delay * 1000,
-			     phy_post_delay * 1000 + 1000);
 
 	return 0;
 }
@@ -3318,6 +3463,35 @@ fec_enet_get_queue_num(struct platform_device *pdev, int *num_tx, int *num_rx)
 
 }
 
+#if defined(HAVE_KSZ_SWITCH)
+struct ksz_sw *check_avail_switch(int id, int phy_mode)
+{
+	char phy_id[MII_BUS_ID_SIZE];
+	char bus_id[MII_BUS_ID_SIZE];
+	struct net_device netdev;
+	struct ksz_sw *sw = NULL;
+	struct phy_device *phydev = NULL;
+
+	snprintf(bus_id, MII_BUS_ID_SIZE, "sw.%d", id);
+	snprintf(phy_id, MII_BUS_ID_SIZE, PHY_ID_FMT, bus_id, 0);
+	phydev = phy_attach(&netdev, phy_id, phy_mode);
+	if (!IS_ERR(phydev)) {
+		struct phy_priv *phydata = phydev->priv;
+
+		sw = phydata->port.sw;
+		phy_detach(phydev);
+	}
+	return sw;
+}
+
+static struct ksz_port *get_priv_port(struct net_device *dev)
+{
+	struct fec_enet_private *fep = netdev_priv(dev);
+
+	return &fep->port;
+}
+#endif
+
 static int
 fec_probe(struct platform_device *pdev)
 {
@@ -3331,6 +3505,9 @@ fec_probe(struct platform_device *pdev)
 	struct device_node *np = pdev->dev.of_node, *phy_node;
 	int num_tx_qs;
 	int num_rx_qs;
+#if defined(HAVE_KSZ_SWITCH)
+	struct ksz_sw *sw;
+#endif
 
 	fec_enet_get_queue_num(pdev, &num_tx_qs, &num_rx_qs);
 
@@ -3458,10 +3635,6 @@ fec_probe(struct platform_device *pdev)
 			goto failed_regulator;
 		}
 	} else {
-		if (PTR_ERR(fep->reg_phy) == -EPROBE_DEFER) {
-			ret = -EPROBE_DEFER;
-			goto failed_regulator;
-		}
 		fep->reg_phy = NULL;
 	}
 
@@ -3508,10 +3681,48 @@ fec_probe(struct platform_device *pdev)
 	fec_enet_clk_enable(ndev, false);
 	pinctrl_pm_select_sleep_state(&pdev->dev);
 
+#if defined(HAVE_KSZ_SWITCH)
+	sw = check_avail_switch(0, PHY_INTERFACE_MODE_RGMII_ID);
+	if (sw) {
+		int dev_count = 1;
+		int port_count = 1;
+		int mib_port_count = 1;
+		char dev_name[IFNAMSIZ];
+		struct ksz_port *port = &fep->port;
+
+		dev_name[0] = '\0';
+		sw->net_ops->get_priv_port = get_priv_port;
+		sw->net_ops->setup_special(sw, &port_count, &mib_port_count,
+			&dev_count);
+		for (i = 0; i < dev_count; i++) {
+			sw->net_ops->setup_dev(sw, ndev, dev_name, port, i,
+				port_count, mib_port_count);
+			if (!dev_name[0])
+				strlcpy(dev_name, ndev->name, IFNAMSIZ);
+		}
+#ifdef CONFIG_1588_PTP
+		if (sw->features & PTP_HW) {
+			struct ptp_info *ptp = &sw->ptp_hw;
+
+			ptp->ops->init(ptp, ndev->dev_addr);
+			if (sw->features & VLAN_PORT)
+				ptp->overrides |= PTP_PORT_FORWARD;
+		}
+#endif
+		fep->sw = sw;
+		sw->napi = &fep->napi;
+	}
+#endif
+
 	ret = register_netdev(ndev);
 	if (ret)
 		goto failed_register;
 
+#if defined(HAVE_KSZ_SWITCH_)
+	if (sw) {
+		ret = init_sw_sysfs(sw, &fep->sysfs, &ndev->dev);
+	}
+#endif
 	device_init_wakeup(&ndev->dev, fep->wol_flag &
 			   FEC_WOL_HAS_MAGIC_PACKET);
 
@@ -3543,9 +3754,8 @@ failed_clk_ipg:
 failed_clk:
 	if (of_phy_is_fixed_link(np))
 		of_phy_deregister_fixed_link(np);
-	of_node_put(phy_node);
 failed_phy:
-	dev_id--;
+	of_node_put(phy_node);
 failed_ioremap:
 	free_netdev(ndev);
 

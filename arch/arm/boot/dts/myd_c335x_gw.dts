@@ -620,6 +620,37 @@
         reg = <0x50>;
     };
 
+	i2c_ksz9897: ksz9897@5f {
+					compatible = "microchip,ksz9897";
+					reg = <0x5f>;
+					phy-mode = "rgmii-id";
+
+					interrupt-parent = <&pioB>;
+					interrupts = <28 IRQ_TYPE_LEVEL_LOW>;
+					status = "okay";
+					ports {
+						#address-cells = <1>;
+						#size-cells = <0>;
+						port@0 {
+							reg = <0>;
+							label = "lan1";
+						};
+						port@1 {
+							reg = <1>;
+							label = "lan2";
+						};
+						port@2 {
+							reg = <2>;
+							label = "cpu";
+							ethernet = <&macb0>;
+							fixed-link {
+								speed = <1000>;
+								full-duplex;
+							};
+						};
+					};
+				};
+
 };
 
 &usb {
