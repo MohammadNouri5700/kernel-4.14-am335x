@@ -33,7 +33,7 @@
 #include <linux/interrupt.h>
 #include <linux/of_irq.h>
 #endif
- 
+
 #include "cpts.h"
 #ifdef CONFIG_TI_1PPS_DM_TIMER
 #include "ptp_bc.h"
