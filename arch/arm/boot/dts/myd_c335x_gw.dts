@@ -655,7 +655,6 @@
 			port@5 {
 				reg = <5>;
 				label = "cpu";
-				ethernet = <&fec1>;
 				fixed-link {
 					speed = <1000>;
 					full-duplex;
