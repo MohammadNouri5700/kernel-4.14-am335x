@@ -625,7 +625,6 @@
 	reg = <0x5f>;
 	phy-mode = "rgmii-txid";
 	pinctrl-names = "default";
-	pinctrl-0 = <&pinctrl_ksz9897_irq>;
 	interrupt-parent = <&gpio1>;
 	interrupts = <10 IRQ_TYPE_LEVEL_LOW>;
 	status = "okay";
