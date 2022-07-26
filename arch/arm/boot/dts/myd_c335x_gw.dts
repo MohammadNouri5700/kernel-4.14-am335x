@@ -868,7 +868,7 @@
 		dcdc3_reg: regulator@2 {
 			/* VDD_CORE voltage limits 0.95V - 1.1V with +/-4% tolerance */
 			regulator-name = "vdd_core";
-			regulator-min-microvolt = <925000>;
+			regulator-min-microvolt = <1351500>;
 			regulator-max-microvolt = <1150000>;
 			regulator-boot-on;
 			regulator-always-on;
